@@ -7,11 +7,12 @@ import { NonterminalKind, TerminalKind } from "@nomicfoundation/slang/kinds";
 import { calculateERC7201StorageLocation, getNamespaceId } from './namespace';
 import { Language } from '@nomicfoundation/slang/language';
 import assert = require('node:assert');
-import { NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
-import { ContractDefinition, StateVariableDefinition } from '@nomicfoundation/slang/ast';
+import { NodeType, NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
+import { ContractDefinition, FunctionDefinition, StateVariableDefinition } from '@nomicfoundation/slang/ast';
 import { cursor, parse_output } from '@nomicfoundation/slang';
-import { slangToVSCodeRange, getTrimmedRange } from './helpers/slang';
+import { slangToVSCodeRange, getTrimmedRange, goToPreviousTerminalWithKinds, isTrivia, getNatSpec } from './helpers/slang';
 import { NamespaceableContract, addDiagnostic, getSolidityVersion, getNamespacePrefix } from './server';
+import { Query } from '@nomicfoundation/slang/query';
 
 export const VARIABLE_CAN_BE_NAMESPACED = "VariableCanBeNamespaced";
 export const CONTRACT_CAN_BE_NAMESPACED = "ContractCanBeNamespaced";
@@ -41,26 +42,53 @@ export async function validateNamespaces(parseOutput: parse_output.ParseOutput, 
 			console.log("Parsing contract: " + contractDef.name.text);
 		}
 
-		/**
-		 * For each contract:
-		 * 1. Check if it is upgradeable (TODO)
-		 * 2. Look for exising namespace struct
-		 * 		 * if struct has annotation
-		 *       /// @custom:storage-location erc7201
-		 *      - then add it to the model
-		 * 3.
-		 */
-		await validateNamespaceAnnotation(cursor, textDocument, contractDef, diagnostics);
-		await validateNamespaceCommentAndHash(cursor, textDocument, contractDef, diagnostics);
-		await validateStandaloneNamespaceHash(cursor, textDocument, contractDef, diagnostics);
+		if (inferUpgradeable(cursor, contractDef)) {
+			await validateNamespaceAnnotation(cursor, textDocument, contractDef, diagnostics);
+			await validateNamespaceCommentAndHash(cursor, textDocument, contractDef, diagnostics);
+			await validateStandaloneNamespaceHash(cursor, textDocument, contractDef, diagnostics);
 
-		const namespaceableContract: NamespaceableContract = {
-			name: contractDef.name.text,
-			variables: []
-		};
-		await validateNamespaceableVariables(cursor, textDocument, diagnostics, namespaceableContract);
-		validateNamespaceableContract(cursor, diagnostics, textDocument, namespaceableContract);
+			const namespaceableContract: NamespaceableContract = {
+				name: contractDef.name.text,
+				variables: []
+			};
+			await validateNamespaceableVariables(cursor, textDocument, diagnostics, namespaceableContract);
+			validateNamespaceableContract(cursor, diagnostics, textDocument, namespaceableContract);
+		}
 	}
+}
+
+/**
+ * Infers whether a contract looks like an upgradeable contract, based on any of the following:
+ * - Inherits `Initializable` or `UUPSUpgradeable`.
+ * - Has an `_authorizeUpgrade(address)` function.
+ * - Has the NatSpec annotation `@custom:oz-upgrades`
+ * - Has the NatSpec annotation `@custom:oz-upgrades-from <reference>`
+ */
+function inferUpgradeable(cursor: cursor.Cursor, contractDef: ContractDefinition): boolean {
+	const hasInitializable = contractDef.inheritance?.types.items.some(type => type.typeName.items.some(item => item.text === "Initializable"));
+	const hasUUPSUpgradeable = contractDef.inheritance?.types.items.some(type => type.typeName.items.some(item => item.text === "UUPSUpgradeable"));
+	if (hasInitializable || hasUUPSUpgradeable) {
+		return true;
+	}
+
+	const functionCursor = cursor.spawn();
+	while (functionCursor.goToNextNonterminalWithKind(NonterminalKind.FunctionDefinition)) {
+		const functionDefNode = functionCursor.node();
+		assert(functionDefNode instanceof NonterminalNode);
+
+		const functionDef = new FunctionDefinition(functionDefNode);
+		const functionName = functionDef.name.variant.text;
+		if (functionName === "_authorizeUpgrade" && functionDef.parameters.parameters.items.length === 1 && functionDef.parameters.parameters.items[0].typeName.cst.unparse() === "address") {
+			return true;
+		}
+	}
+
+	const natSpecTokens = getNatSpec(cursor)?.split(/\s+/);
+	if (natSpecTokens !== undefined && (natSpecTokens.includes("@custom:oz-upgrades") || natSpecTokens.includes("@custom:oz-upgrades-from"))) {
+		return true;
+	}
+	
+	return false;
 }
 
 function validateNamespaceableContract(cursor: cursor.Cursor, diagnostics: Diagnostic[], textDocument: TextDocument, namespaceableContract: NamespaceableContract) {

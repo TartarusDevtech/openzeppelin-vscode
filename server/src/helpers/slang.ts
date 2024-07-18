@@ -13,7 +13,7 @@ import semver from 'semver';
 /**
  * Returns true if the node is a trivia terminal (whitespace or comment or NatSpec)
  */
-function isTrivia(node: Node) {
+export function isTrivia(node: Node) {
 	return node instanceof TerminalNode &&
 		(node.kind === TerminalKind.EndOfLine ||
 			node.kind === TerminalKind.MultiLineComment ||
@@ -33,6 +33,37 @@ function goToLastTerminal(cursor: cursor.Cursor) {
 			break;
 		}
 	} while (cursor.goToNextTerminal());
+}
+
+/**
+ * Gets the NatSpec comment within the leading trivia nodes starting from the cursor
+ */
+export function getNatSpec(cursor: cursor.Cursor) {
+	const triviaCursor = cursor.clone();
+	let natSpec = undefined;
+
+	// Traverse terminal nodes from the cursor's position until we find a NatSpec comment, or reach a non-trivia node
+	while (triviaCursor.goToNextTerminal()) {
+		const node = triviaCursor.node();
+		assert(node instanceof TerminalNode);
+		if (!isTrivia(node)) {
+			break;
+		} else if (node.kind === TerminalKind.SingleLineNatSpecComment || node.kind === TerminalKind.MultiLineNatSpecComment) {
+			natSpec = node.text;
+			break;
+		}
+	}
+	return natSpec;
+}
+
+export function goToPreviousTerminalWithKinds(cursor: cursor.Cursor, kinds: TerminalKind[]) {
+	while (cursor.goToPrevious()) {
+		const node = cursor.node();
+		if (node.type === NodeType.Terminal && kinds.includes(node.kind)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 /**
