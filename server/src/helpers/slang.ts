@@ -14,13 +14,16 @@ import semver from 'semver';
  * Returns true if the node is a trivia terminal (whitespace or comment or NatSpec)
  */
 export function isTrivia(node: Node) {
-	return node instanceof TerminalNode &&
-		(node.kind === TerminalKind.EndOfLine ||
-			node.kind === TerminalKind.MultiLineComment ||
-			node.kind === TerminalKind.MultiLineNatSpecComment ||
-			node.kind === TerminalKind.SingleLineComment ||
-			node.kind === TerminalKind.SingleLineNatSpecComment ||
-			node.kind === TerminalKind.Whitespace);
+	return node instanceof TerminalNode && isTriviaKind(node.kind);
+}
+
+function isTriviaKind(kind: TerminalKind) {
+	return kind === TerminalKind.EndOfLine ||
+		kind === TerminalKind.MultiLineComment ||
+		kind === TerminalKind.MultiLineNatSpecComment ||
+		kind === TerminalKind.SingleLineComment ||
+		kind === TerminalKind.SingleLineNatSpecComment ||
+		kind === TerminalKind.Whitespace;
 }
 
 /**
@@ -39,21 +42,30 @@ function goToLastTerminal(cursor: cursor.Cursor) {
  * Gets the NatSpec comment within the leading trivia nodes starting from the cursor
  */
 export function getNatSpec(cursor: cursor.Cursor) {
-	const triviaCursor = cursor.clone();
-	let natSpec = undefined;
+	return getNextTriviaWithKinds(cursor, [TerminalKind.MultiLineNatSpecComment, TerminalKind.SingleLineNatSpecComment]);
+}
 
-	// Traverse terminal nodes from the cursor's position until we find a NatSpec comment, or reach a non-trivia node
+/**
+ * Gets the first trivia matching any of the given kinds from the leading trivia nodes starting from the cursor
+ */
+export function getNextTriviaWithKinds(cursor: cursor.Cursor, kinds: TerminalKind[]) {
+	assert(kinds.every(kind => isTriviaKind(kind)));
+
+	const triviaCursor = cursor.clone();
+	let result = undefined;
+
+	// Traverse terminal nodes from the cursor's position until we find the right kind, or reach a non-trivia node
 	while (triviaCursor.goToNextTerminal()) {
 		const node = triviaCursor.node();
 		assert(node instanceof TerminalNode);
 		if (!isTrivia(node)) {
 			break;
-		} else if (node.kind === TerminalKind.SingleLineNatSpecComment || node.kind === TerminalKind.MultiLineNatSpecComment) {
-			natSpec = node.text;
+		} else if (kinds.some(kind => kind === node.kind)) {
+			result = node.text;
 			break;
 		}
 	}
-	return natSpec;
+	return result;
 }
 
 export function goToPreviousTerminalWithKinds(cursor: cursor.Cursor, kinds: TerminalKind[]) {
