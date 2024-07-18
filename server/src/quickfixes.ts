@@ -9,7 +9,7 @@ import { Namespace, Variable, printNamespaceTemplate, getNamespaceId } from './n
 import { Language } from '@nomicfoundation/slang/language';
 import assert = require('node:assert');
 import { NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
-import { ContractDefinition } from '@nomicfoundation/slang/ast';
+import { ContractDefinition, FunctionBody } from '@nomicfoundation/slang/ast';
 import { cursor, text_index } from '@nomicfoundation/slang';
 import { slangToVSCodeRange } from './helpers/slang';
 import { getSolidityVersion } from './server';
@@ -140,35 +140,39 @@ function getNamespaceStructEndRange(contractCursor: cursor.Cursor, prefix: strin
 }
 
 function editNamespaceVariablesInFunctions(contractCursor: cursor.Cursor, contractName: string, variables: Variable[], textDocument: TextDocument, edits: TextEdit[]) {
-	// For each function, find all usage of given variables,
-	// insert `MainStorage storage $ = _getMainStorage();` (where Main is the contract name) at the beginning of the function if it doesn't exist already,
-	// and replace all usages of variables with `$.variableName`
 	const functionBodyCursor = contractCursor.spawn();
 	while (functionBodyCursor.goToNextNonterminalWithKind(NonterminalKind.FunctionBody)) {
 		const functionBodyNode = functionBodyCursor.node();
 		assert(functionBodyNode instanceof NonterminalNode);
-		const functionText = functionBodyNode.unparse();
-		const expectedLine = `${contractName}Storage storage $ = _get${contractName}Storage();`;
 
-		let replacement = functionText;
-		// replace all usages of variables with $.variableName
-		variables.forEach((variable) => {
-			const regex = new RegExp(`\\b${variable.name}\\b`, 'g');
-			replacement = replacement.replace(regex, `$.${variable.name}`);
+		addStorageGetter(contractName, functionBodyNode, functionBodyCursor, edits, textDocument);
+		replaceVariables(functionBodyCursor, variables, edits, textDocument);
+	}
+}
+
+function addStorageGetter(contractName: string, functionBodyNode: NonterminalNode, functionBodyCursor: cursor.Cursor, edits: TextEdit[], textDocument: TextDocument, indent = "    ") {
+	const expectedLine = `${contractName}Storage storage $ = _get${contractName}Storage();`;
+	if (!functionBodyNode.unparse().includes(expectedLine)) {
+		const openBraceCursor = functionBodyCursor.spawn();
+		assert(openBraceCursor.goToNextTerminalWithKind(TerminalKind.OpenBrace));
+		edits.push({
+			range: slangToVSCodeRange(textDocument, openBraceCursor.textRange),
+			newText: `{\n${indent}${indent}${expectedLine}\n`
 		});
+	}
+}
 
-		if (replacement !== functionText && !replacement.includes(expectedLine)) {
-			// replace opening bracket with opening bracket and expected line
-			const openingBracketIndex = replacement.indexOf('{');
-			replacement = replacement.slice(0, openingBracketIndex) + '{\n        ' + expectedLine + '\n' + replacement.slice(openingBracketIndex + 1);
+function replaceVariables(functionBodyCursor: cursor.Cursor, variables: Variable[], edits: TextEdit[], textDocument: TextDocument) {
+	const identifierCursor = functionBodyCursor.spawn();
+	while (identifierCursor.goToNextTerminalWithKind(TerminalKind.Identifier)) {
+		const identifierNode = identifierCursor.node();
+		assert(identifierNode instanceof TerminalNode);
+
+		if (variables.some(variable => variable.name === identifierNode.text)) {
+			edits.push({
+				range: slangToVSCodeRange(textDocument, identifierCursor.textRange),
+				newText: `$.${identifierNode.text}`
+			});
 		}
-
-		console.log('Replacing function with: ' + replacement);
-		const edit: TextEdit = {
-			range: slangToVSCodeRange(textDocument, functionBodyCursor.textRange),
-			newText: replacement
-		};
-		edits.push(edit);
-
 	}
 }
