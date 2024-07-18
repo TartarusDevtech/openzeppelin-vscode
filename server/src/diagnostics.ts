@@ -42,18 +42,19 @@ export async function validateNamespaces(parseOutput: parse_output.ParseOutput, 
 			console.log("Parsing contract: " + contractDef.name.text);
 		}
 
-		if (inferUpgradeable(cursor, contractDef)) {
+		const namespaceableContract: NamespaceableContract = {
+			name: contractDef.name.text,
+			variables: []
+		};
+
+		const inferredUpgradeable = inferUpgradeable(cursor, contractDef);
+		if (inferredUpgradeable) {
 			await validateNamespaceAnnotation(cursor, textDocument, contractDef, diagnostics);
 			await validateNamespaceCommentAndHash(cursor, textDocument, contractDef, diagnostics);
 			await validateStandaloneNamespaceHash(cursor, textDocument, contractDef, diagnostics);
-
-			const namespaceableContract: NamespaceableContract = {
-				name: contractDef.name.text,
-				variables: []
-			};
-			await validateNamespaceableVariables(cursor, textDocument, diagnostics, namespaceableContract);
-			validateNamespaceableContract(cursor, diagnostics, textDocument, namespaceableContract);
 		}
+		await validateNamespaceableVariables(cursor, textDocument, diagnostics, namespaceableContract, !inferredUpgradeable);
+		validateNamespaceableContract(cursor, diagnostics, textDocument, namespaceableContract);
 	}
 }
 
@@ -112,7 +113,7 @@ function validateNamespaceableContract(cursor: cursor.Cursor, diagnostics: Diagn
 	}
 }
 
-async function validateNamespaceableVariables(cursor: cursor.Cursor, textDocument: TextDocument, diagnostics: Diagnostic[], namespaceableContract: NamespaceableContract) {
+async function validateNamespaceableVariables(cursor: cursor.Cursor, textDocument: TextDocument, diagnostics: Diagnostic[], namespaceableContract: NamespaceableContract, skipDiagnostic: boolean) {
 	const childCursor = cursor.spawn();
 	while (childCursor.goToNextNonterminalWithKind(NonterminalKind.StateVariableDefinition)) {
 		const cursorNode = childCursor.node();
@@ -145,27 +146,31 @@ async function validateNamespaceableVariables(cursor: cursor.Cursor, textDocumen
 		if (ignoreVariable) {
 			console.log('Ignoring immutable or constant variable: ' + variableText);
 		} else if (stateVar.value !== undefined) {
-			addDiagnostic(
-				diagnostics,
-				textDocument,
-				slangToVSCodeRange(textDocument, trimmedRange),
-				`Variable has initial value`,
-				"If this contract is an upgradeable contract, consider moving this variable to namespaced storage and setting it in an initializer.",
-				DiagnosticSeverity.Warning,
-				VARIABLE_HAS_INITIAL_VALUE,
-				undefined
-			);
+			if (!skipDiagnostic) {
+				addDiagnostic(
+					diagnostics,
+					textDocument,
+					slangToVSCodeRange(textDocument, trimmedRange),
+					`Variable has initial value`,
+					"If this contract is an upgradeable contract, consider moving this variable to namespaced storage and setting it in an initializer.",
+					DiagnosticSeverity.Warning,
+					VARIABLE_HAS_INITIAL_VALUE,
+					undefined
+				);
+			}
 		} else {
-			addDiagnostic(
-				diagnostics,
-				textDocument,
-				slangToVSCodeRange(textDocument, trimmedRange),
-				`Variable can be namespaced.`,
-				"If this contract is an upgradeable contract, consider moving this variable to namespaced storage.",
-				DiagnosticSeverity.Information,
-				VARIABLE_CAN_BE_NAMESPACED,
-				undefined
-			);
+			if (!skipDiagnostic) {
+				addDiagnostic(
+					diagnostics,
+					textDocument,
+					slangToVSCodeRange(textDocument, trimmedRange),
+					`Variable can be namespaced.`,
+					"If this contract is an upgradeable contract, consider moving this variable to namespaced storage.",
+					DiagnosticSeverity.Information,
+					VARIABLE_CAN_BE_NAMESPACED,
+					undefined
+				);	
+			}
 
 			namespaceableContract.variables.push({ content: replacement, name: stateVar.name.text, range: slangToVSCodeRange(textDocument, trimmedRange) });
 		}
