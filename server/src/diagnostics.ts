@@ -265,25 +265,37 @@ async function validateNamespaceStructAnnotation(cursor: cursor.Cursor, textDocu
 		assert(structDefNode instanceof NonterminalNode);
 
 		const natSpec = getNatSpec(structCursor);
-		if (natSpec !== undefined && natSpec.text.includes("@custom:storage-location erc7201")) {
-			console.log("Found erc7201 storage location annotation");
+		if (natSpec !== undefined) {
+			let regex: RegExp;
+			assert(natSpec.kind === TerminalKind.SingleLineNatSpecComment || natSpec.kind === TerminalKind.MultiLineNatSpecComment);
 
-			let namespacePrefix = await getNamespacePrefix(textDocument);
+			if (natSpec.kind === TerminalKind.SingleLineNatSpecComment) {
+				regex = /@custom:storage-location erc7201:(\S+)/;
+			} else {
+				regex = /@custom:storage-location erc7201:(\S+)(?=\s|\*\/)/;
+			}
 
-			const expectedNamespaceId = getExpectedNamespaceId(namespacePrefix, contractDef);
-			if (!natSpec.text.endsWith(`@custom:storage-location erc7201:${expectedNamespaceId}`)) {
-				addDiagnostic(
-					diagnostics,
-					textDocument,
-					slangToVSCodeRange(textDocument, natSpec.textRange),
-					`Unexpected namespace id`,
-					`Namespace id expected to be ${namespacePrefix}.${contractDef.name.text}`,
-					DiagnosticSeverity.Warning,
-					NAMESPACE_ID_MISMATCH,
-					{ replacement: `/// @custom:storage-location erc7201:${expectedNamespaceId}` } // TODO use the same kind of NatSpec (single line or multiline) as the original, and keep any other text that was there
-				);
+			const match = natSpec.text.match(regex);
+			if (match && match[1] !== undefined) {
+				console.log("Found erc7201 storage location annotation with id: " + match[1]);
+
+				let namespacePrefix = await getNamespacePrefix(textDocument);
+					const expectedNamespaceId = getExpectedNamespaceId(namespacePrefix, contractDef);
+				if (match[1] !== expectedNamespaceId) {
+					addDiagnostic(
+						diagnostics,
+						textDocument,
+						slangToVSCodeRange(textDocument, natSpec.textRange),
+						`Unexpected namespace id`,
+						`Namespace id expected to be ${namespacePrefix}.${contractDef.name.text}`,
+						DiagnosticSeverity.Warning,
+						NAMESPACE_ID_MISMATCH,
+						{ replacement: `/// @custom:storage-location erc7201:${expectedNamespaceId}` } // TODO use the same kind of NatSpec (single line or multiline) as the original, and keep any other text that was there
+					);
+				}
 			}
 		}
+
 	}
 
 	// TODO
