@@ -7,12 +7,11 @@ import { NonterminalKind, TerminalKind } from "@nomicfoundation/slang/kinds";
 import { calculateERC7201StorageLocation, getNamespaceId } from './namespace';
 import { Language } from '@nomicfoundation/slang/language';
 import assert = require('node:assert');
-import { NodeType, NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
+import { NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
 import { ContractDefinition, FunctionDefinition, StateVariableDefinition } from '@nomicfoundation/slang/ast';
 import { cursor, parse_output } from '@nomicfoundation/slang';
-import { slangToVSCodeRange, getTrimmedRange, goToPreviousTerminalWithKinds, isTrivia, getNatSpec, getNextTriviaWithKinds } from './helpers/slang';
+import { slangToVSCodeRange, getTrimmedRange, getNatSpec, getLastPrecedingTriviaWithKinds } from './helpers/slang';
 import { NamespaceableContract, addDiagnostic, getSolidityVersion, getNamespacePrefix } from './server';
-import { Query } from '@nomicfoundation/slang/query';
 
 export const VARIABLE_CAN_BE_NAMESPACED = "VariableCanBeNamespaced";
 export const CONTRACT_CAN_BE_NAMESPACED = "ContractCanBeNamespaced";
@@ -179,7 +178,7 @@ async function validateNamespaceableVariables(cursor: cursor.Cursor, textDocumen
 async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocument: TextDocument, contractDef: ContractDefinition, diagnostics: Diagnostic[]) {
 	const spawnedCursor = cursor.spawn();
 	while (spawnedCursor.goToNextNonterminalWithKind(NonterminalKind.StateVariableDefinition)) {
-		const comment = getNextTriviaWithKinds(spawnedCursor, [TerminalKind.SingleLineComment, TerminalKind.MultiLineComment]);
+		const comment = getLastPrecedingTriviaWithKinds(spawnedCursor, [TerminalKind.SingleLineComment, TerminalKind.MultiLineComment]);
 		let expectedHashFromComment = undefined;
 		let commentHasUnexpectedNamespace = false;
 

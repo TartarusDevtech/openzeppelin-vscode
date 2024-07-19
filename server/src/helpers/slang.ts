@@ -39,10 +39,24 @@ function goToLastTerminal(cursor: cursor.Cursor) {
 }
 
 /**
+ * Moves the cursor to the first terminal node that is not a trivia
+ * @param cursor the cursor to move
+ * @returns true if a non-trivia terminal was found, false otherwise
+ */
+function goToFirstNonTrivia(cursor: cursor.Cursor): boolean {
+	do {
+		if (!cursor.clone().goToNextTerminal()) {
+			return false;			
+		}
+	} while (cursor.goToNextTerminal() && isTrivia(cursor.node()));
+	return true;
+}
+
+/**
  * Gets the NatSpec comment within the leading trivia nodes starting from the cursor
  */
 export function getNatSpec(cursor: cursor.Cursor) {
-	return getNextTriviaWithKinds(cursor, [TerminalKind.MultiLineNatSpecComment, TerminalKind.SingleLineNatSpecComment])?.text;
+	return getLastPrecedingTriviaWithKinds(cursor, [TerminalKind.MultiLineNatSpecComment, TerminalKind.SingleLineNatSpecComment])?.text;
 }
 
 interface Trivia {
@@ -51,29 +65,24 @@ interface Trivia {
 }
 
 /**
- * Gets the first trivia matching any of the given kinds from the leading trivia nodes starting from the cursor
+ * Gets the last trivia matching any of the given kinds from the leading trivia nodes starting from the cursor
  */
-export function getNextTriviaWithKinds(cursor: cursor.Cursor, kinds: TerminalKind[]): Trivia | undefined{
+export function getLastPrecedingTriviaWithKinds(cursor: cursor.Cursor, kinds: TerminalKind[]): Trivia | undefined{
 	assert(kinds.every(kind => isTriviaKind(kind)));
 
 	const triviaCursor = cursor.clone();
 	let result = undefined;
 
-	// Traverse terminal nodes from the cursor's position until we find the right kind, or reach a non-trivia node
-	while (triviaCursor.goToNextTerminal()) {
+	if (goToFirstNonTrivia(triviaCursor) && goToPreviousTerminalWithKinds(triviaCursor, kinds)) {
 		const node = triviaCursor.node();
 		assert(node instanceof TerminalNode);
-		if (!isTrivia(node)) {
-			break;
-		} else if (kinds.some(kind => kind === node.kind)) {
-			result = { text: node.text, textRange: triviaCursor.textRange };
-			break;
-		}
+		result = { text: node.text, textRange: triviaCursor.textRange };
 	}
+
 	return result;
 }
 
-export function goToPreviousTerminalWithKinds(cursor: cursor.Cursor, kinds: TerminalKind[]) {
+function goToPreviousTerminalWithKinds(cursor: cursor.Cursor, kinds: TerminalKind[]) {
 	while (cursor.goToPrevious()) {
 		const node = cursor.node();
 		if (node.type === NodeType.Terminal && kinds.includes(node.kind)) {
