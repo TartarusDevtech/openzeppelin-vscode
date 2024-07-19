@@ -56,12 +56,13 @@ function goToFirstNonTrivia(cursor: cursor.Cursor): boolean {
  * Gets the NatSpec comment within the leading trivia nodes starting from the cursor
  */
 export function getNatSpec(cursor: cursor.Cursor) {
-	return getLastPrecedingTriviaWithKinds(cursor, [TerminalKind.MultiLineNatSpecComment, TerminalKind.SingleLineNatSpecComment])?.text;
+	return getLastPrecedingTriviaWithKinds(cursor, [TerminalKind.MultiLineNatSpecComment, TerminalKind.SingleLineNatSpecComment]);
 }
 
 interface TriviaTextWithRange {
 	text: string;
 	textRange: text_index.TextRange;
+	kind: TerminalKind;
 }
 
 /**
@@ -76,7 +77,7 @@ export function getLastPrecedingTriviaWithKinds(cursor: cursor.Cursor, kinds: Te
 	if (goToFirstNonTrivia(triviaCursor) && goToPreviousTerminalWithKinds(triviaCursor, kinds)) {
 		const node = triviaCursor.node();
 		assert(node instanceof TerminalNode);
-		result = { text: node.text, textRange: triviaCursor.textRange };
+		result = { text: node.text, textRange: triviaCursor.textRange, kind: node.kind };
 	}
 
 	return result;

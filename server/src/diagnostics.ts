@@ -48,7 +48,7 @@ export async function validateNamespaces(parseOutput: parse_output.ParseOutput, 
 
 		const inferredUpgradeable = inferUpgradeable(cursor, contractDef);
 		if (inferredUpgradeable) {
-			await validateNamespaceAnnotation(cursor, textDocument, contractDef, diagnostics);
+			await validateNamespaceStructAnnotation(cursor, textDocument, contractDef, diagnostics);
 			await validateNamespaceCommentAndHash(cursor, textDocument, contractDef, diagnostics);
 		}
 		await validateNamespaceableVariables(cursor, textDocument, diagnostics, namespaceableContract, !inferredUpgradeable);
@@ -82,7 +82,7 @@ function inferUpgradeable(cursor: cursor.Cursor, contractDef: ContractDefinition
 		}
 	}
 
-	const natSpecTokens = getNatSpec(cursor)?.split(/\s+/);
+	const natSpecTokens = getNatSpec(cursor)?.text.split(/\s+/);
 	if (natSpecTokens !== undefined && (natSpecTokens.includes("@custom:oz-upgrades") || natSpecTokens.includes("@custom:oz-upgrades-from"))) {
 		return true;
 	}
@@ -206,7 +206,7 @@ async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocume
 						`Namespace id expected to be ${namespacePrefix}.${contractDef.name.text}`,
 						DiagnosticSeverity.Warning,
 						NAMESPACE_ID_MISMATCH_HASH_COMMENT,
-						{ replacement: `// keccak256(abi.encode(uint256(keccak256("${expectedNamespaceId}")) - 1)) & ~bytes32(uint256(0xff))` }
+						{ replacement: `// keccak256(abi.encode(uint256(keccak256("${expectedNamespaceId}")) - 1)) & ~bytes32(uint256(0xff))` } // TODO use comment or multiline commend depending on original kind. keep any other comment text that was there
 					);
 				}
 
@@ -258,34 +258,36 @@ async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocume
 
 }
 
-async function validateNamespaceAnnotation(cursor: cursor.Cursor, textDocument: TextDocument, contractDef: ContractDefinition, diagnostics: Diagnostic[]) {
-	const natspecCursor = cursor.spawn();
-	while (natspecCursor.goToNextTerminalWithKind(TerminalKind.SingleLineNatSpecComment)) {
-		// TODO add warning if multiple namespaces are found, or error if multiple namespaces are found with the same id
-		const natspecNode = natspecCursor.node();
-		assert(natspecNode instanceof TerminalNode);
+async function validateNamespaceStructAnnotation(cursor: cursor.Cursor, textDocument: TextDocument, contractDef: ContractDefinition, diagnostics: Diagnostic[]) {
+	const structCursor = cursor.spawn();
+	while (structCursor.goToNextNonterminalWithKind(NonterminalKind.StructDefinition)) {
+		const structDefNode = structCursor.node();
+		assert(structDefNode instanceof NonterminalNode);
 
-		const natspecText = natspecNode.text;
-		console.log("Natspec: " + natspecText);
-
-		if (natspecText.includes("@custom:storage-location erc7201")) {
+		const natSpec = getNatSpec(structCursor);
+		if (natSpec !== undefined && natSpec.text.includes("@custom:storage-location erc7201")) {
 			console.log("Found erc7201 storage location annotation");
 
 			let namespacePrefix = await getNamespacePrefix(textDocument);
 
 			const expectedNamespaceId = getExpectedNamespaceId(namespacePrefix, contractDef);
-			if (!natspecText.endsWith(`@custom:storage-location erc7201:${expectedNamespaceId}`)) {
+			if (!natSpec.text.endsWith(`@custom:storage-location erc7201:${expectedNamespaceId}`)) {
 				addDiagnostic(
 					diagnostics,
 					textDocument,
-					slangToVSCodeRange(textDocument, natspecCursor.textRange),
+					slangToVSCodeRange(textDocument, natSpec.textRange),
 					`Unexpected namespace id`,
 					`Namespace id expected to be ${namespacePrefix}.${contractDef.name.text}`,
 					DiagnosticSeverity.Warning,
 					NAMESPACE_ID_MISMATCH,
-					{ replacement: `/// @custom:storage-location erc7201:${expectedNamespaceId}` }
+					{ replacement: `/// @custom:storage-location erc7201:${expectedNamespaceId}` } // TODO use the same kind of NatSpec (single line or multiline) as the original, and keep any other text that was there
 				);
 			}
 		}
 	}
+
+	// TODO
+	// - if there are multiple namespaces, show a warning
+	// - if there are multiple namespaces with the same id, show an error
+
 }
