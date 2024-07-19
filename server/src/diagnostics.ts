@@ -304,7 +304,7 @@ async function validateNamespaceStructAnnotation(cursor: cursor.Cursor, textDocu
 						textDocument,
 						slangToVSCodeRange(textDocument, natSpec.textRange),
 						`Unexpected namespace id`,
-						`Expected ${namespacePrefix}.${contractDef.name.text}`,
+						`Namepace id does not match prefix ${namespacePrefix} and contract name ${contractDef.name.text}`,
 						DiagnosticSeverity.Warning,
 						NAMESPACE_ID_MISMATCH,
 						{ replacement: `/// @custom:storage-location erc7201:${expectedNamespaceId}` } // TODO use the same kind of NatSpec (single line or multiline) as the original, and keep any other text that was there
