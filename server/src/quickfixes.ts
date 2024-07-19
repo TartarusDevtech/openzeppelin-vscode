@@ -140,17 +140,9 @@ function getNamespaceStructEndRange(contractCursor: cursor.Cursor, prefix: strin
 
 function editNamespaceVariablesInFunctions(contractCursor: cursor.Cursor, contractName: string, variables: Variable[], textDocument: TextDocument, edits: TextEdit[]) {
 	const cursor = contractCursor.spawn();
-	while (cursor.goToNextNonterminalWithKinds([NonterminalKind.ConstructorDefinition, NonterminalKind.FunctionDefinition])) {
+	while (cursor.goToNextNonterminalWithKinds([NonterminalKind.ConstructorDefinition, NonterminalKind.FunctionBody])) {
 		const blockCursor = cursor.spawn();
-		const constructorOrFunctionNode = blockCursor.node();
-		assert(constructorOrFunctionNode instanceof NonterminalNode);
-
-		if (constructorOrFunctionNode.kind === NonterminalKind.ConstructorDefinition) {
-			blockCursor.goToNextNonterminalWithKind(NonterminalKind.Block);
-		} else {
-			blockCursor.goToNextNonterminalWithKind(NonterminalKind.FunctionBody);
-			blockCursor.goToNextNonterminalWithKind(NonterminalKind.Block);
-		}
+		blockCursor.goToNextNonterminalWithKind(NonterminalKind.Block);
 
 		const blockNode = blockCursor.node();
 		assert(blockNode instanceof NonterminalNode);
