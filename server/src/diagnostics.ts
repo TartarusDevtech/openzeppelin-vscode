@@ -205,7 +205,7 @@ async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocume
 						textDocument,
 						slangToVSCodeRange(textDocument, comment.textRange),
 						`Unexpected namespace id`,
-						`Namespace id expected to be ${namespacePrefix}.${contractDef.name.text}`,
+						`Expected ${namespacePrefix}.${contractDef.name.text}`,
 						DiagnosticSeverity.Warning,
 						NAMESPACE_ID_MISMATCH_HASH_COMMENT,
 						{ replacement: `// keccak256(abi.encode(uint256(keccak256("${expectedNamespaceId}")) - 1)) & ~bytes32(uint256(0xff))` } // TODO use comment or multiline commend depending on original kind. keep any other comment text that was there
@@ -306,7 +306,7 @@ async function validateNamespaceStructAnnotation(cursor: cursor.Cursor, textDocu
 						textDocument,
 						slangToVSCodeRange(textDocument, natSpec.textRange),
 						`Unexpected namespace id`,
-						`Namespace id expected to be ${namespacePrefix}.${contractDef.name.text}`,
+						`Expected ${namespacePrefix}.${contractDef.name.text}`,
 						DiagnosticSeverity.Warning,
 						NAMESPACE_ID_MISMATCH,
 						{ replacement: `/// @custom:storage-location erc7201:${expectedNamespaceId}` } // TODO use the same kind of NatSpec (single line or multiline) as the original, and keep any other text that was there
@@ -325,7 +325,7 @@ async function validateNamespaceStructAnnotation(cursor: cursor.Cursor, textDocu
 					diagnostics,
 					textDocument,
 					slangToVSCodeRange(textDocument, namespaceId.textRange),
-					`Duplicate namespace id`,
+					`Duplicate namespaces`,
 					`Namespace ids must be unique`,
 					DiagnosticSeverity.Error,
 					DUPLICATE_NAMESPACE_ID,
