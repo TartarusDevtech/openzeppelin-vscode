@@ -1,6 +1,5 @@
 import { Diagnostic, CodeActionKind, CodeAction, WorkspaceEdit } from 'vscode-languageserver/node';
 import {
-	Range,
 	TextDocument,
 	TextEdit
 } from 'vscode-languageserver-textdocument';
@@ -9,7 +8,7 @@ import { Namespace, Variable, printNamespaceTemplate, getNamespaceId } from './n
 import { Language } from '@nomicfoundation/slang/language';
 import assert = require('node:assert');
 import { NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
-import { ContractDefinition, FunctionBody } from '@nomicfoundation/slang/ast';
+import { ContractDefinition } from '@nomicfoundation/slang/ast';
 import { cursor, text_index } from '@nomicfoundation/slang';
 import { slangToVSCodeRange } from './helpers/slang';
 import { getSolidityVersion } from './server';
@@ -140,19 +139,32 @@ function getNamespaceStructEndRange(contractCursor: cursor.Cursor, prefix: strin
 }
 
 function editNamespaceVariablesInFunctions(contractCursor: cursor.Cursor, contractName: string, variables: Variable[], textDocument: TextDocument, edits: TextEdit[]) {
-	const functionBodyCursor = contractCursor.spawn();
-	while (functionBodyCursor.goToNextNonterminalWithKind(NonterminalKind.FunctionBody)) {
-		const functionBodyNode = functionBodyCursor.node();
-		assert(functionBodyNode instanceof NonterminalNode);
+	const cursor = contractCursor.spawn();
+	while (cursor.goToNextNonterminalWithKinds([NonterminalKind.ConstructorDefinition, NonterminalKind.FunctionDefinition])) {
+		const blockCursor = cursor.spawn();
+		const constructorOrFunctionNode = blockCursor.node();
+		assert(constructorOrFunctionNode instanceof NonterminalNode);
 
-		addStorageGetter(contractName, functionBodyNode, functionBodyCursor, edits, textDocument);
-		replaceVariables(functionBodyCursor, variables, edits, textDocument);
+		if (constructorOrFunctionNode.kind === NonterminalKind.ConstructorDefinition) {
+			blockCursor.goToNextNonterminalWithKind(NonterminalKind.Block);
+		} else {
+			blockCursor.goToNextNonterminalWithKind(NonterminalKind.FunctionBody);
+			blockCursor.goToNextNonterminalWithKind(NonterminalKind.Block);
+		}
+
+		const blockNode = blockCursor.node();
+		assert(blockNode instanceof NonterminalNode);
+
+		const needsReplacement = replaceVariables(blockCursor, variables, edits, textDocument);
+		if (needsReplacement) {
+			addStorageGetter(contractName, blockNode, blockCursor, edits, textDocument);
+		}
 	}
 }
 
-function addStorageGetter(contractName: string, functionBodyNode: NonterminalNode, functionBodyCursor: cursor.Cursor, edits: TextEdit[], textDocument: TextDocument, indent = "    ") {
+function addStorageGetter(contractName: string, blockNode: NonterminalNode, functionBodyCursor: cursor.Cursor, edits: TextEdit[], textDocument: TextDocument, indent = "    ") {
 	const expectedLine = `${contractName}Storage storage $ = _get${contractName}Storage();`;
-	if (!functionBodyNode.unparse().includes(expectedLine)) {
+	if (!blockNode.unparse().includes(expectedLine)) {
 		const openBraceCursor = functionBodyCursor.spawn();
 		assert(openBraceCursor.goToNextTerminalWithKind(TerminalKind.OpenBrace));
 		edits.push({
@@ -162,17 +174,20 @@ function addStorageGetter(contractName: string, functionBodyNode: NonterminalNod
 	}
 }
 
-function replaceVariables(functionBodyCursor: cursor.Cursor, variables: Variable[], edits: TextEdit[], textDocument: TextDocument) {
-	const identifierCursor = functionBodyCursor.spawn();
+function replaceVariables(blockCursor: cursor.Cursor, variables: Variable[], edits: TextEdit[], textDocument: TextDocument): boolean {
+	let needsReplacement = false;
+	const identifierCursor = blockCursor.spawn();
 	while (identifierCursor.goToNextTerminalWithKind(TerminalKind.Identifier)) {
 		const identifierNode = identifierCursor.node();
 		assert(identifierNode instanceof TerminalNode);
 
 		if (variables.some(variable => variable.name === identifierNode.text)) {
+			needsReplacement = true;
 			edits.push({
 				range: slangToVSCodeRange(textDocument, identifierCursor.textRange),
 				newText: `$.${identifierNode.text}`
 			});
 		}
 	}
+	return needsReplacement;
 }
