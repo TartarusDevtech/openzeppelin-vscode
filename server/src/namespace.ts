@@ -58,5 +58,7 @@ export function calculateERC7201StorageLocation(id: string): string {
 	const mask = BigInt('0xff');
 	const masked = BigInt('0x' + secondHash.toString('hex')) & ~mask;
 
-	return '0x' + masked.toString(16);
+	const padded = masked.toString(16).padStart(64, '0');
+
+	return '0x' + padded;
 }
