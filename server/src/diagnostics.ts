@@ -50,8 +50,10 @@ export async function validateNamespaces(parseOutput: parse_output.ParseOutput, 
 
 		const inferredUpgradeable = inferUpgradeable(cursor, contractDef);
 		if (inferredUpgradeable) {
-			await validateNamespaceStructAnnotation(cursor, textDocument, contractDef, diagnostics);
-			await validateNamespaceCommentAndHash(cursor, textDocument, contractDef, diagnostics);
+			const foundSingleNamespace = await validateNamespaceStructAnnotation(cursor, textDocument, contractDef, diagnostics);
+			if (foundSingleNamespace !== undefined) {
+				await validateNamespaceCommentAndHash(foundSingleNamespace.namespaceId, cursor, textDocument, contractDef, diagnostics);
+			}
 		}
 		await validateNamespaceableVariables(cursor, textDocument, diagnostics, namespaceableContract, !inferredUpgradeable);
 		validateNamespaceableContract(cursor, diagnostics, textDocument, namespaceableContract);
@@ -177,7 +179,7 @@ async function validateNamespaceableVariables(cursor: cursor.Cursor, textDocumen
 	}
 }
 
-async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocument: TextDocument, contractDef: ContractDefinition, diagnostics: Diagnostic[]) {
+async function validateNamespaceCommentAndHash(expectedNamespaceId: string, cursor: cursor.Cursor, textDocument: TextDocument, contractDef: ContractDefinition, diagnostics: Diagnostic[]) {
 	const spawnedCursor = cursor.spawn();
 	while (spawnedCursor.goToNextNonterminalWithKind(NonterminalKind.StateVariableDefinition)) {
 		const comment = getLastPrecedingTriviaWithKinds(spawnedCursor, [TerminalKind.SingleLineComment, TerminalKind.MultiLineComment]);
@@ -190,11 +192,6 @@ async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocume
 			const match = comment.text.match(regex);
 
 			if (match) {
-				let namespacePrefix = await getNamespacePrefix(textDocument);
-
-				// TODO to validate this hash, get expected namespace ID from struct annotation instead of based on contract name
-				const expectedNamespaceId = getExpectedNamespaceId(namespacePrefix, contractDef);
-
 				// namespace id in comment does not match expected namespace id
 				assert(match[1] !== undefined);
 				if (match[1] !== expectedNamespaceId) {
@@ -204,8 +201,8 @@ async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocume
 						diagnostics,
 						textDocument,
 						slangToVSCodeRange(textDocument, comment.textRange),
-						`Unexpected namespace id`,
-						`Expected ${namespacePrefix}.${contractDef.name.text}`,
+						`Comment does not match namespace id`,
+						`Expected namespace id ${expectedNamespaceId}`,
 						DiagnosticSeverity.Warning,
 						NAMESPACE_ID_MISMATCH_HASH_COMMENT,
 						{ replacement: `// keccak256(abi.encode(uint256(keccak256("${expectedNamespaceId}")) - 1)) & ~bytes32(uint256(0xff))` } // TODO use comment or multiline commend depending on original kind. keep any other comment text that was there
@@ -226,7 +223,6 @@ async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocume
 			if (constantNode instanceof NonterminalNode) {
 				const text = constantNode.unparse();
 
-				const expectedNamespaceId = getExpectedNamespaceId(await getNamespacePrefix(textDocument), contractDef);
 				const expectedHashFromNamespace = calculateERC7201StorageLocation(expectedNamespaceId);
 
 				if (expectedHashFromComment !== undefined && !text.includes(expectedHashFromComment)) {
@@ -270,8 +266,10 @@ interface NamespaceIdAndRange {
  * - A struct's namespace id does not match the expected namespace id for the contract
  * - Multiple namespaces are defined in the same contract
  * - Multiple namespaces have the same id
+ * 
+ * @returns The namespace used in the struct annotation, if exactly one was found. Otherwise, undefined.
  */
-async function validateNamespaceStructAnnotation(cursor: cursor.Cursor, textDocument: TextDocument, contractDef: ContractDefinition, diagnostics: Diagnostic[]) {
+async function validateNamespaceStructAnnotation(cursor: cursor.Cursor, textDocument: TextDocument, contractDef: ContractDefinition, diagnostics: Diagnostic[]): Promise<NamespaceIdAndRange | undefined> {
 	const foundNamespaceIds: NamespaceIdAndRange[] = [];
 
 	const structCursor = cursor.spawn();
@@ -348,4 +346,6 @@ async function validateNamespaceStructAnnotation(cursor: cursor.Cursor, textDocu
 			}
 		}
 	}
+
+	return foundNamespaceIds.length === 1 ? foundNamespaceIds[0] : undefined;
 }
