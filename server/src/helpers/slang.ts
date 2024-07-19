@@ -42,13 +42,18 @@ function goToLastTerminal(cursor: cursor.Cursor) {
  * Gets the NatSpec comment within the leading trivia nodes starting from the cursor
  */
 export function getNatSpec(cursor: cursor.Cursor) {
-	return getNextTriviaWithKinds(cursor, [TerminalKind.MultiLineNatSpecComment, TerminalKind.SingleLineNatSpecComment]);
+	return getNextTriviaWithKinds(cursor, [TerminalKind.MultiLineNatSpecComment, TerminalKind.SingleLineNatSpecComment])?.text;
+}
+
+interface Trivia {
+	text: string;
+	textRange: text_index.TextRange;
 }
 
 /**
  * Gets the first trivia matching any of the given kinds from the leading trivia nodes starting from the cursor
  */
-export function getNextTriviaWithKinds(cursor: cursor.Cursor, kinds: TerminalKind[]) {
+export function getNextTriviaWithKinds(cursor: cursor.Cursor, kinds: TerminalKind[]): Trivia | undefined{
 	assert(kinds.every(kind => isTriviaKind(kind)));
 
 	const triviaCursor = cursor.clone();
@@ -61,7 +66,7 @@ export function getNextTriviaWithKinds(cursor: cursor.Cursor, kinds: TerminalKin
 		if (!isTrivia(node)) {
 			break;
 		} else if (kinds.some(kind => kind === node.kind)) {
-			result = node.text;
+			result = { text: node.text, textRange: triviaCursor.textRange };
 			break;
 		}
 	}

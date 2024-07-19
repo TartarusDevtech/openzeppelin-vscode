@@ -10,7 +10,7 @@ import assert = require('node:assert');
 import { NodeType, NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
 import { ContractDefinition, FunctionDefinition, StateVariableDefinition } from '@nomicfoundation/slang/ast';
 import { cursor, parse_output } from '@nomicfoundation/slang';
-import { slangToVSCodeRange, getTrimmedRange, goToPreviousTerminalWithKinds, isTrivia, getNatSpec } from './helpers/slang';
+import { slangToVSCodeRange, getTrimmedRange, goToPreviousTerminalWithKinds, isTrivia, getNatSpec, getNextTriviaWithKinds } from './helpers/slang';
 import { NamespaceableContract, addDiagnostic, getSolidityVersion, getNamespacePrefix } from './server';
 import { Query } from '@nomicfoundation/slang/query';
 
@@ -51,7 +51,6 @@ export async function validateNamespaces(parseOutput: parse_output.ParseOutput, 
 		if (inferredUpgradeable) {
 			await validateNamespaceAnnotation(cursor, textDocument, contractDef, diagnostics);
 			await validateNamespaceCommentAndHash(cursor, textDocument, contractDef, diagnostics);
-			await validateStandaloneNamespaceHash(cursor, textDocument, contractDef, diagnostics);
 		}
 		await validateNamespaceableVariables(cursor, textDocument, diagnostics, namespaceableContract, !inferredUpgradeable);
 		validateNamespaceableContract(cursor, diagnostics, textDocument, namespaceableContract);
@@ -178,64 +177,39 @@ async function validateNamespaceableVariables(cursor: cursor.Cursor, textDocumen
 }
 
 async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocument: TextDocument, contractDef: ContractDefinition, diagnostics: Diagnostic[]) {
-	const commentCursor = cursor.spawn();
-	while (commentCursor.goToNextTerminalWithKind(TerminalKind.SingleLineComment)) {
-		const commentNode = commentCursor.node();
-		assert(commentNode instanceof TerminalNode);
-		const commentText = commentNode.text;
+	const spawnedCursor = cursor.spawn();
+	while (spawnedCursor.goToNextNonterminalWithKind(NonterminalKind.StateVariableDefinition)) {
+		const comment = getNextTriviaWithKinds(spawnedCursor, [TerminalKind.SingleLineComment, TerminalKind.MultiLineComment]);
+		let expectedHashFromComment = undefined;
 
-		// check if comment looks like a representation of the namespace hash calculation, and capture its namespace id
-		const regex = /keccak256\(abi\.encode\(uint256\(keccak256\("(.*)"\)\) *- *1\)\) *& *~bytes32\(uint256\(0xff\)\)/;
-		const match = commentText.match(regex);
+		if (comment !== undefined) {
+			// check if comment looks like a representation of the namespace hash calculation, and capture its namespace id
+			const regex = /keccak256\(abi\.encode\(uint256\(keccak256\("(.*)"\)\) *- *1\)\) *& *~bytes32\(uint256\(0xff\)\)/;
+			const match = comment.text.match(regex);
 
-		if (match) {
-			let namespacePrefix = await getNamespacePrefix(textDocument);
-			const expectedNamespaceId = getExpectedNamespaceId(namespacePrefix, contractDef);
+			if (match) {
+				let namespacePrefix = await getNamespacePrefix(textDocument);
+				const expectedNamespaceId = getExpectedNamespaceId(namespacePrefix, contractDef);
 
-			// namespace id in comment does not match expected namespace id
-			assert(match[1] !== undefined);
-			if (match[1] !== expectedNamespaceId) {
-				addDiagnostic(
-					diagnostics,
-					textDocument,
-					slangToVSCodeRange(textDocument, commentCursor.textRange),
-					`Unexpected namespace id in comment`,
-					`Namespace id expected to be ${namespacePrefix}.${contractDef.name.text}`,
-					DiagnosticSeverity.Warning,
-					NAMESPACE_ID_MISMATCH_HASH_COMMENT,
-					{ replacement: `// keccak256(abi.encode(uint256(keccak256("${expectedNamespaceId}")) - 1)) & ~bytes32(uint256(0xff))` }
-				);
-			}
-
-			// TODO: continue loop if there is other content between the comment and the variable definition
-			// check if the hash in the comment matches the constant
-			commentCursor.goToNextNonterminalWithKind(NonterminalKind.StateVariableDefinitionValue);
-			commentCursor.goToNextNonterminalWithKind(NonterminalKind.Expression);
-			const constantNode = commentCursor.node();
-			if (constantNode instanceof NonterminalNode) {
-				const text = constantNode.unparse();
-
-				const expectedHashFromComment = calculateERC7201StorageLocation(match[1]);
-				if (expectedHashFromComment && !text.includes(expectedHashFromComment)) {
+				// namespace id in comment does not match expected namespace id
+				assert(match[1] !== undefined);
+				if (match[1] !== expectedNamespaceId) {
 					addDiagnostic(
 						diagnostics,
 						textDocument,
-						slangToVSCodeRange(textDocument, getTrimmedRange(commentCursor)),
-						`ERC7201 storage location hash does not match comment`,
-						`Expected hash to be based on ${namespacePrefix}.${contractDef.name.text}`,
+						slangToVSCodeRange(textDocument, comment.textRange),
+						`Unexpected namespace id`,
+						`Namespace id expected to be ${namespacePrefix}.${contractDef.name.text}`,
 						DiagnosticSeverity.Warning,
-						NAMESPACE_HASH_MISMATCH,
-						{ replacement: expectedHashFromComment }
+						NAMESPACE_ID_MISMATCH_HASH_COMMENT,
+						{ replacement: `// keccak256(abi.encode(uint256(keccak256("${expectedNamespaceId}")) - 1)) & ~bytes32(uint256(0xff))` }
 					);
 				}
+
+				expectedHashFromComment = calculateERC7201StorageLocation(match[1]);
 			}
 		}
-	}
-}
 
-async function validateStandaloneNamespaceHash(cursor: cursor.Cursor, textDocument: TextDocument, contractDef: ContractDefinition, diagnostics: Diagnostic[]) {
-	const spawnedCursor = cursor.spawn();
-	while (spawnedCursor.goToNextNonterminalWithKind(NonterminalKind.StateVariableDefinition)) {
 		const stateVarDefNode = spawnedCursor.node();
 		assert(stateVarDefNode instanceof NonterminalNode);
 		const stateVariableDefinition = new StateVariableDefinition(stateVarDefNode);
@@ -247,9 +221,22 @@ async function validateStandaloneNamespaceHash(cursor: cursor.Cursor, textDocume
 				const text = constantNode.unparse();
 
 				const expectedNamespaceId = getExpectedNamespaceId(await getNamespacePrefix(textDocument), contractDef);
+				const expectedHashFromNamespace = calculateERC7201StorageLocation(expectedNamespaceId);
 
-				const expectedHash = calculateERC7201StorageLocation(expectedNamespaceId);
-				if (expectedHash && !text.includes(expectedHash)) {
+				if (expectedHashFromComment !== undefined && !text.includes(expectedHashFromComment)) {
+					addDiagnostic(
+						diagnostics,
+						textDocument,
+						slangToVSCodeRange(textDocument, getTrimmedRange(spawnedCursor)),
+						`ERC7201 storage location hash does not match comment`,
+						`Hash does not match formula in comment`,
+						DiagnosticSeverity.Warning,
+						NAMESPACE_HASH_MISMATCH,
+						{ replacement: expectedHashFromComment }
+					);
+				}
+
+				if (expectedHashFromNamespace !== expectedHashFromComment && !text.includes(expectedHashFromNamespace)) {
 					addDiagnostic(
 						diagnostics,
 						textDocument,
@@ -258,7 +245,7 @@ async function validateStandaloneNamespaceHash(cursor: cursor.Cursor, textDocume
 						`Expected hash to be based on ${expectedNamespaceId}`,
 						DiagnosticSeverity.Warning,
 						NAMESPACE_STANDALONE_HASH_MISMATCH,
-						{ replacement: expectedHash }
+						{ replacement: expectedHashFromNamespace }
 					);
 				}
 			}
