@@ -1,11 +1,11 @@
 {
-	"name": "openzeppelin-ls",
+	"name": "openzeppelin-vscode",
 	"description": "OpenZeppelin Language Server",
 	"author": "OpenZeppelin",
 	"version": "0.0.1",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/OpenZeppelin/openzeppelin-ls"
+		"url": "https://github.com/OpenZeppelin/openzeppelin-vscode"
 	},
 	"publisher": "OpenZeppelin",
 	"categories": [],

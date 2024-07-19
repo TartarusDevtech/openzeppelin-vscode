@@ -1,12 +1,12 @@
 {
-	"name": "openzeppelin-ls-client",
+	"name": "openzeppelin-vscode-client",
 	"description": "OpenZeppelin VSCode",
 	"author": "OpenZeppelin",
 	"version": "0.0.1",
 	"publisher": "OpenZeppelin",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/OpenZeppelin/openzeppelin-ls"
+		"url": "https://github.com/OpenZeppelin/openzeppelin-vscode"
 	},
 	"engines": {
 		"vscode": "^1.75.0"

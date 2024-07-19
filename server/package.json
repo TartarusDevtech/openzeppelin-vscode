@@ -1,5 +1,5 @@
 {
-	"name": "openzeppelin-ls-server",
+	"name": "openzeppelin-ls",
 	"description": "OpenZeppelin Language Server",
 	"version": "0.0.0",
 	"author": "OpenZeppelin",
@@ -8,7 +8,7 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/OpenZeppelin/openzeppelin-ls"
+		"url": "https://github.com/OpenZeppelin/openzeppelin-vscode"
 	},
 	"dependencies": {
 		"@nomicfoundation/slang": "^0.15.1",
