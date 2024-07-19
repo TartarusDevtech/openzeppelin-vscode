@@ -181,6 +181,7 @@ async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocume
 	while (spawnedCursor.goToNextNonterminalWithKind(NonterminalKind.StateVariableDefinition)) {
 		const comment = getNextTriviaWithKinds(spawnedCursor, [TerminalKind.SingleLineComment, TerminalKind.MultiLineComment]);
 		let expectedHashFromComment = undefined;
+		let commentHasUnexpectedNamespace = false;
 
 		if (comment !== undefined) {
 			// check if comment looks like a representation of the namespace hash calculation, and capture its namespace id
@@ -189,11 +190,15 @@ async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocume
 
 			if (match) {
 				let namespacePrefix = await getNamespacePrefix(textDocument);
+
+				// TODO to validate this hash, get expected namespace ID from struct annotation instead of based on contract name
 				const expectedNamespaceId = getExpectedNamespaceId(namespacePrefix, contractDef);
 
 				// namespace id in comment does not match expected namespace id
 				assert(match[1] !== undefined);
 				if (match[1] !== expectedNamespaceId) {
+					commentHasUnexpectedNamespace = true;
+
 					addDiagnostic(
 						diagnostics,
 						textDocument,
@@ -236,7 +241,7 @@ async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocume
 					);
 				}
 
-				if (expectedHashFromNamespace !== expectedHashFromComment && !text.includes(expectedHashFromNamespace)) {
+				if (!commentHasUnexpectedNamespace && expectedHashFromNamespace !== expectedHashFromComment && !text.includes(expectedHashFromNamespace)) {
 					addDiagnostic(
 						diagnostics,
 						textDocument,
