@@ -9,7 +9,7 @@ import { Language } from '@nomicfoundation/slang/language';
 import assert = require('node:assert');
 import { NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
 import { ContractDefinition, FunctionDefinition, StateVariableDefinition } from '@nomicfoundation/slang/ast';
-import { cursor, parse_output } from '@nomicfoundation/slang';
+import { cursor, parse_output, text_index } from '@nomicfoundation/slang';
 import { slangToVSCodeRange, getTrimmedRange, getNatSpec, getLastPrecedingTriviaWithKinds } from './helpers/slang';
 import { NamespaceableContract, addDiagnostic, getSolidityVersion, getNamespacePrefix } from './server';
 
@@ -20,6 +20,8 @@ export const NAMESPACE_ID_MISMATCH_HASH_COMMENT = "NamespaceIdMismatchHashCommen
 export const NAMESPACE_HASH_MISMATCH = "NamespaceHashMismatch";
 export const NAMESPACE_STANDALONE_HASH_MISMATCH = "NamespaceStandaloneHashMismatch";
 export const VARIABLE_HAS_INITIAL_VALUE = "VariableHasInitialValue";
+export const MULTIPLE_NAMESPACES = "MultipleNamespaces";
+export const DUPLICATE_NAMESPACE_ID = "DuplicateNamespaceId";
 
 function getExpectedNamespaceId(namespacePrefix: string, contractDef: ContractDefinition) {
 	return getNamespaceId(namespacePrefix, contractDef.name.text);
@@ -258,7 +260,20 @@ async function validateNamespaceCommentAndHash(cursor: cursor.Cursor, textDocume
 
 }
 
+interface NamespaceIdAndRange {
+	namespaceId: string;
+	textRange: text_index.TextRange;
+}
+
+/**
+ * Generates a diagnostic if any of the following occur:
+ * - A struct's namespace id does not match the expected namespace id for the contract
+ * - Multiple namespaces are defined in the same contract
+ * - Multiple namespaces have the same id
+ */
 async function validateNamespaceStructAnnotation(cursor: cursor.Cursor, textDocument: TextDocument, contractDef: ContractDefinition, diagnostics: Diagnostic[]) {
+	const foundNamespaceIds: NamespaceIdAndRange[] = [];
+
 	const structCursor = cursor.spawn();
 	while (structCursor.goToNextNonterminalWithKind(NonterminalKind.StructDefinition)) {
 		const structDefNode = structCursor.node();
@@ -278,9 +293,13 @@ async function validateNamespaceStructAnnotation(cursor: cursor.Cursor, textDocu
 			const match = natSpec.text.match(regex);
 			if (match && match[1] !== undefined) {
 				console.log("Found erc7201 storage location annotation with id: " + match[1]);
+				foundNamespaceIds.push({
+					namespaceId: match[1],
+					textRange: natSpec.textRange,
+				});
 
 				let namespacePrefix = await getNamespacePrefix(textDocument);
-					const expectedNamespaceId = getExpectedNamespaceId(namespacePrefix, contractDef);
+				const expectedNamespaceId = getExpectedNamespaceId(namespacePrefix, contractDef);
 				if (match[1] !== expectedNamespaceId) {
 					addDiagnostic(
 						diagnostics,
@@ -295,11 +314,38 @@ async function validateNamespaceStructAnnotation(cursor: cursor.Cursor, textDocu
 				}
 			}
 		}
-
 	}
 
-	// TODO
-	// - if there are multiple namespaces, show a warning
-	// - if there are multiple namespaces with the same id, show an error
-
+	if (foundNamespaceIds.length > 1) {
+		const duplicateNamespaceIds = foundNamespaceIds.filter((value, index, self) => self.findIndex(t => t.namespaceId === value.namespaceId) !== index);
+		if (duplicateNamespaceIds.length > 0) {
+			// if there are multiple namespaces with the same id, show an error
+			for (const namespaceId of duplicateNamespaceIds) {
+				addDiagnostic(
+					diagnostics,
+					textDocument,
+					slangToVSCodeRange(textDocument, namespaceId.textRange),
+					`Duplicate namespace id`,
+					`Namespace ids must be unique`,
+					DiagnosticSeverity.Error,
+					DUPLICATE_NAMESPACE_ID,
+					undefined
+				);
+			}
+		} else {
+			// or if there are multiple namespaces in general, show a warning
+			for (const namespaceId of foundNamespaceIds) {
+				addDiagnostic(
+					diagnostics,
+					textDocument,
+					slangToVSCodeRange(textDocument, namespaceId.textRange),
+					`Multiple namespaces`,
+					`Only one namespace per contract is recommended`,
+					DiagnosticSeverity.Warning,
+					MULTIPLE_NAMESPACES,
+					undefined
+				);
+			}
+		}
+	}
 }

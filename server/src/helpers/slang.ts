@@ -71,7 +71,7 @@ interface TriviaTextWithRange {
 export function getLastPrecedingTriviaWithKinds(cursor: cursor.Cursor, kinds: TerminalKind[]): TriviaTextWithRange | undefined{
 	assert(kinds.every(kind => isTriviaKind(kind)));
 
-	const triviaCursor = cursor.clone();
+	const triviaCursor = cursor.spawn();
 	let result = undefined;
 
 	if (goToFirstNonTrivia(triviaCursor) && goToPreviousTerminalWithKinds(triviaCursor, kinds)) {
