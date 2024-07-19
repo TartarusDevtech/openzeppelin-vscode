@@ -59,7 +59,7 @@ export function getNatSpec(cursor: cursor.Cursor) {
 	return getLastPrecedingTriviaWithKinds(cursor, [TerminalKind.MultiLineNatSpecComment, TerminalKind.SingleLineNatSpecComment])?.text;
 }
 
-interface Trivia {
+interface TriviaTextWithRange {
 	text: string;
 	textRange: text_index.TextRange;
 }
@@ -67,7 +67,7 @@ interface Trivia {
 /**
  * Gets the last trivia matching any of the given kinds from the leading trivia nodes starting from the cursor
  */
-export function getLastPrecedingTriviaWithKinds(cursor: cursor.Cursor, kinds: TerminalKind[]): Trivia | undefined{
+export function getLastPrecedingTriviaWithKinds(cursor: cursor.Cursor, kinds: TerminalKind[]): TriviaTextWithRange | undefined{
 	assert(kinds.every(kind => isTriviaKind(kind)));
 
 	const triviaCursor = cursor.clone();
