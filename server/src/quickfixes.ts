@@ -109,6 +109,8 @@ export async function getMoveAllVariablesToNamespaceQuickFix(fixesDiagnostics: D
 			};
 			edits.push(deleteVariableTextEdit);
 
+			// TODO infer indents from textDocument using the first indent before the first non-trivia in the contract
+			// TODO instead of adding indents, get the trivia around the original variable and use that
 			let insertVariableTextEdit: TextEdit = {
 				range: slangToVSCodeRange(textDocument, structEndRange),
 				newText: `\

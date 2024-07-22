@@ -38,6 +38,7 @@ import { URI } from 'vscode-uri';
 import { getHighestSupportedPragmaVersion } from './helpers/slang';
 import { CONTRACT_CAN_BE_NAMESPACED, NAMESPACE_HASH_MISMATCH, NAMESPACE_ID_MISMATCH, NAMESPACE_ID_MISMATCH_HASH_COMMENT, NAMESPACE_STANDALONE_HASH_MISMATCH, validateNamespaces } from './diagnostics';
 import { getMoveAllVariablesToNamespaceQuickFix } from './quickfixes';
+import { getNamespacePrefix, OpenZeppelinLSSettings } from './settings';
 
 
 // Create a connection for the server, using Node's IPC as a transport.
@@ -51,7 +52,7 @@ let hasConfigurationCapability = false;
 let hasWorkspaceFolderCapability = false;
 let hasDiagnosticRelatedInformationCapability = false;
 
-let workspaceFolders: string[] = [];
+export let workspaceFolders: string[] = [];
 
 connection.onInitialize((params: InitializeParams) => {
 	const capabilities = params.capabilities;
@@ -117,14 +118,10 @@ connection.onInitialized(() => {
 	}
 });
 
-interface OpenZeppelinLSSettings {
-	namespacePrefix: string;
-}
-
 // The global settings, used when the `workspace/configuration` request is not supported by the client.
 // Please note that this is not the case when using this server with the client provided in this example
 // but could happen with other clients.
-const defaultSettings: OpenZeppelinLSSettings = { namespacePrefix: "" };
+const defaultSettings: OpenZeppelinLSSettings = { compilerVersion: "", namespacePrefix: "" };
 let globalSettings: OpenZeppelinLSSettings = defaultSettings;
 
 // Cache the settings of all open documents
@@ -145,7 +142,7 @@ connection.onDidChangeConfiguration(change => {
 	connection.languages.diagnostics.refresh();
 });
 
-function getDocumentSettings(resource: string): Thenable<OpenZeppelinLSSettings> {
+export function getDocumentSettings(resource: string): Thenable<OpenZeppelinLSSettings> {
 	if (!hasConfigurationCapability) {
 		return Promise.resolve(globalSettings);
 	}
@@ -196,19 +193,37 @@ export type NamespaceableContract = {
 
 export async function getSolidityVersion(textDocument: TextDocument) {
 	// TODO: get solidity version from:
-	// 1. setting
-	// 2. infer from foundry config
-	// 3. infer from hardhat config
-	
-	// 4. infer from pragma using the highest compatible semantic version
-	let version = getHighestSupportedPragmaVersion(textDocument);
 
-	if (!version) {
-		console.error("Could not determine Solidity version from pragma. Using latest version.");
-		version = Language.supportedVersions()[Language.supportedVersions().length - 1];
+	// 1. setting
+	const versionFromSetting = (await getDocumentSettings(textDocument.uri)).compilerVersion;
+	if (versionFromSetting && versionFromSetting.trim().length > 0) {
+		console.log("Using Solidity version from settings: " + versionFromSetting);
+		return versionFromSetting;
 	}
 
-	return version;
+	// 2. infer from foundry config
+	const versionFromFoundry = undefined; // TODO
+	if (versionFromFoundry) {
+		console.log("Using Solidity version from Foundry config: " + versionFromFoundry);
+		return versionFromFoundry;
+	}
+
+	// 3. infer from hardhat config
+	const versionFromHardhat = undefined; // TODO
+	if (versionFromHardhat) {
+		console.log("Using Solidity version from Hardhat config: " + versionFromHardhat);
+		return versionFromHardhat;
+	}
+	
+	// 4. infer from pragma using the highest compatible semantic version
+	const versionFromPragma = getHighestSupportedPragmaVersion(textDocument);
+	if (versionFromPragma) {
+		console.log("Using Solidity version from pragma: " + versionFromPragma);
+		return versionFromPragma;
+	}
+
+	console.error("Could not determine Solidity version from pragma. Using latest version.");
+	return Language.supportedVersions()[Language.supportedVersions().length - 1];
 }
 
 async function validateTextDocument(textDocument: TextDocument): Promise<Diagnostic[]> {
@@ -274,26 +289,6 @@ connection.onCodeAction(
 		return codeActions;
 	}
 )
-
-/**
- * Gets the namespace prefix from the settings or the workspace folder name.
- */
-export async function getNamespacePrefix(textDocument: TextDocument) {
-	const settings = await getDocumentSettings(textDocument.uri);
-	let namespacePrefix = settings.namespacePrefix;
-	if (!namespacePrefix) {
-		console.log("No namespace prefix set. Detecting based on workspace name.");
-
-		if (workspaceFolders.length > 0) {
-			// for now we just use the folder name of the first workspace folder
-			// TODO: detect project name from hardhat or foundry project?
-			namespacePrefix = workspaceFolders[0].split('/').pop()!;
-		}
-	} else {
-		console.log("Namespace prefix is: " + namespacePrefix);
-	}
-	return namespacePrefix;
-}
 
 async function getCodeActions(diagnostics: Diagnostic[], textDocument: TextDocument, params: CodeActionParams) : Promise<CodeAction[]> {
 	let codeActions : CodeAction[] = [];

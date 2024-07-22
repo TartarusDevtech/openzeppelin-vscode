@@ -11,7 +11,8 @@ import { NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
 import { ContractDefinition, FunctionDefinition, StateVariableDefinition } from '@nomicfoundation/slang/ast';
 import { cursor, parse_output, text_index } from '@nomicfoundation/slang';
 import { slangToVSCodeRange, getTrimmedRange, getNatSpec, getLastPrecedingTriviaWithKinds } from './helpers/slang';
-import { NamespaceableContract, addDiagnostic, getSolidityVersion, getNamespacePrefix } from './server';
+import { NamespaceableContract, addDiagnostic, getSolidityVersion } from './server';
+import { getNamespacePrefix } from './settings';
 
 export const VARIABLE_CAN_BE_NAMESPACED = "VariableCanBeNamespaced";
 export const CONTRACT_CAN_BE_NAMESPACED = "ContractCanBeNamespaced";
