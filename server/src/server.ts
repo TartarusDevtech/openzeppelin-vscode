@@ -40,6 +40,8 @@ import { CONTRACT_CAN_BE_NAMESPACED, NAMESPACE_HASH_MISMATCH, NAMESPACE_ID_MISMA
 import { getMoveAllVariablesToNamespaceQuickFix } from './quickfixes';
 import { getNamespacePrefix, OpenZeppelinLSSettings } from './settings';
 
+import path from 'path';
+import { promises as fs } from 'fs';
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -192,7 +194,7 @@ export type NamespaceableContract = {
 }
 
 export async function getSolidityVersion(textDocument: TextDocument) {
-	// TODO: get solidity version from:
+	// Tries to get solidity version in the following order:
 
 	// 1. setting
 	const versionFromSetting = (await getDocumentSettings(textDocument.uri)).compilerVersion;
@@ -202,14 +204,14 @@ export async function getSolidityVersion(textDocument: TextDocument) {
 	}
 
 	// 2. infer from foundry config
-	const versionFromFoundry = undefined; // TODO
+	const versionFromFoundry = await inferSolidityVersionFromFoundry();
 	if (versionFromFoundry) {
 		console.log("Using Solidity version from Foundry config: " + versionFromFoundry);
 		return versionFromFoundry;
 	}
 
 	// 3. infer from hardhat config
-	const versionFromHardhat = undefined; // TODO
+	const versionFromHardhat = await inferSolidityVersionFromHardhat();
 	if (versionFromHardhat) {
 		console.log("Using Solidity version from Hardhat config: " + versionFromHardhat);
 		return versionFromHardhat;
@@ -224,6 +226,63 @@ export async function getSolidityVersion(textDocument: TextDocument) {
 
 	console.error("Could not determine Solidity version from pragma. Using latest version.");
 	return Language.supportedVersions()[Language.supportedVersions().length - 1];
+}
+
+async function inferSolidityVersionFromFoundry() {
+	if (workspaceFolders.length > 0) {
+		for (const workspaceFolder of workspaceFolders) {
+			const foundryConfigPath = path.join(workspaceFolder, 'foundry.toml');
+			if (await exists(foundryConfigPath)) {
+				const foundryConfig = await fs.readFile(foundryConfigPath, 'utf8');
+				const solidityVersion = foundryConfig.match(/solc\s*=\s*["']([^"']+)["']/);
+				if (solidityVersion && solidityVersion[1]) {
+					return solidityVersion[1];
+				}
+			}
+		}
+	}
+	return undefined;
+}
+
+async function inferSolidityVersionFromHardhat() {
+	if (workspaceFolders.length > 0) {
+		for (const workspaceFolder of workspaceFolders) {
+			const hardhatConfigTsPath = path.join(workspaceFolder, 'hardhat.config.ts');
+			const versionTs = findVersionFromHardhatConfig(hardhatConfigTsPath);
+			if (versionTs) {
+				return versionTs;
+			}
+
+			const hardhatConfigJsPath = path.join(workspaceFolder, 'hardhat.config.js');
+			const versionJs = findVersionFromHardhatConfig(hardhatConfigJsPath);
+			if (versionJs) {
+				return versionJs;
+			}
+		}
+	}
+	return undefined;
+}
+
+async function findVersionFromHardhatConfig(filePath: string) {
+	if (await exists(filePath)) {
+		const hardhatFile = await fs.readFile(filePath, 'utf8');
+
+		const solidityVersion = hardhatFile.match(/solidity:[\s]*{[\s]*version:[\s]*["']([^"']+)["']/);
+		if (solidityVersion && solidityVersion[1]) {
+			return solidityVersion[1];
+		} else {
+			return undefined;
+		}
+	}
+}
+
+async function exists(file: string): Promise<boolean> {
+	try {
+		await fs.access(file);
+		return true;
+	} catch (e: any) {
+		return false;
+	}
 }
 
 async function validateTextDocument(textDocument: TextDocument): Promise<Diagnostic[]> {
