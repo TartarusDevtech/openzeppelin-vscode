@@ -11,8 +11,9 @@ import { NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
 import { ContractDefinition, FunctionDefinition, StateVariableDefinition } from '@nomicfoundation/slang/ast';
 import { cursor, parse_output, text_index } from '@nomicfoundation/slang';
 import { slangToVSCodeRange, getTrimmedRange, getNatSpec, getLastPrecedingTriviaWithKinds } from './helpers/slang';
-import { NamespaceableContract, addDiagnostic, getSolidityVersion } from './server';
+import { NamespaceableContract, addDiagnostic, workspaceFolders } from './server';
 import { getNamespacePrefix } from './settings';
+import { inferSolidityVersion } from './solidityVersion';
 
 export const VARIABLE_CAN_BE_NAMESPACED = "VariableCanBeNamespaced";
 export const CONTRACT_CAN_BE_NAMESPACED = "ContractCanBeNamespaced";
@@ -127,7 +128,7 @@ async function validateNamespaceableVariables(cursor: cursor.Cursor, textDocumen
 
 		// ignore immutable or constant variables
 		let ignoreVariable = false;
-		const language = new Language(await getSolidityVersion(textDocument));
+		const language = new Language(await inferSolidityVersion(textDocument, workspaceFolders));
 		const parseVar = language.parse(NonterminalKind.StateVariableDefinition, variableText);
 		const stateVar = new StateVariableDefinition(parseVar.tree() as NonterminalNode);
 		const attributes = stateVar.attributes.items;

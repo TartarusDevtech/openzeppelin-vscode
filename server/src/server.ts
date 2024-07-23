@@ -35,13 +35,10 @@ import { Variable } from './namespace';
 import { Language } from '@nomicfoundation/slang/language';
 
 import { URI } from 'vscode-uri';
-import { getHighestSupportedPragmaVersion } from './helpers/slang';
 import { CONTRACT_CAN_BE_NAMESPACED, NAMESPACE_HASH_MISMATCH, NAMESPACE_ID_MISMATCH, NAMESPACE_ID_MISMATCH_HASH_COMMENT, NAMESPACE_STANDALONE_HASH_MISMATCH, validateNamespaces } from './diagnostics';
 import { getMoveAllVariablesToNamespaceQuickFix } from './quickfixes';
 import { getNamespacePrefix, OpenZeppelinLSSettings } from './settings';
-
-import path from 'path';
-import { promises as fs } from 'fs';
+import { inferSolidityVersion } from './solidityVersion';
 
 // Create a connection for the server, using Node's IPC as a transport.
 // Also include all preview / proposed LSP features.
@@ -193,103 +190,10 @@ export type NamespaceableContract = {
 	variables: Variable[];
 }
 
-export async function getSolidityVersion(textDocument: TextDocument) {
-	// Tries to get solidity version in the following order:
-
-	// 1. setting
-	const versionFromSetting = (await getDocumentSettings(textDocument.uri)).compilerVersion;
-	if (versionFromSetting && versionFromSetting.trim().length > 0) {
-		console.log("Using Solidity version from settings: " + versionFromSetting);
-		return versionFromSetting;
-	}
-
-	// 2. infer from foundry config
-	const versionFromFoundry = await inferSolidityVersionFromFoundry(workspaceFolders);
-	if (versionFromFoundry) {
-		console.log("Using Solidity version from Foundry config: " + versionFromFoundry);
-		return versionFromFoundry;
-	}
-
-	// 3. infer from hardhat config
-	const versionFromHardhat = await inferSolidityVersionFromHardhat(workspaceFolders);
-	if (versionFromHardhat) {
-		console.log("Using Solidity version from Hardhat config: " + versionFromHardhat);
-		return versionFromHardhat;
-	}
-	
-	// 4. infer from pragma using the highest compatible semantic version
-	const versionFromPragma = getHighestSupportedPragmaVersion(textDocument);
-	if (versionFromPragma) {
-		console.log("Using Solidity version from pragma: " + versionFromPragma);
-		return versionFromPragma;
-	}
-
-	console.error("Could not determine Solidity version from pragma. Using latest version.");
-	return Language.supportedVersions()[Language.supportedVersions().length - 1];
-}
-
-async function inferSolidityVersionFromFoundry(workspaceFolders: string[]) {
-	const regex = /solc\s*=\s*["']([^"']+)["']/;
-
-	if (workspaceFolders.length > 0) {
-		for (const workspaceFolder of workspaceFolders) {
-			const foundryConfigPath = path.join(workspaceFolder, 'foundry.toml');
-			const version = await inferVersionFromConfig(foundryConfigPath, regex);
-			if (version) {
-				return version;
-			}
-		}
-	}
-	return undefined;
-}
-
-async function inferSolidityVersionFromHardhat(workspaceFolders: string[]) {
-	const regex = /solidity:[\s]*{[\s]*version:[\s]*["']([^"']+)["']/;
-
-	if (workspaceFolders.length > 0) {
-		for (const workspaceFolder of workspaceFolders) {
-			const hardhatConfigTsPath = path.join(workspaceFolder, 'hardhat.config.ts');
-			const versionTs = await inferVersionFromConfig(hardhatConfigTsPath, regex);
-			if (versionTs) {
-				return versionTs;
-			}
-
-			const hardhatConfigJsPath = path.join(workspaceFolder, 'hardhat.config.js');
-			const versionJs = await inferVersionFromConfig(hardhatConfigJsPath, regex);
-			if (versionJs) {
-				return versionJs;
-			}
-		}
-	}
-	return undefined;
-}
-
-async function inferVersionFromConfig(filePath: string, regex: RegExp) {
-	if (await exists(filePath)) {
-		const configFile = await fs.readFile(filePath, 'utf8');
-
-		const solidityVersion = configFile.match(regex);
-		if (solidityVersion && solidityVersion[1]) {
-			return solidityVersion[1];
-		} else {
-			return undefined;
-		}
-	}
-}
-
-async function exists(file: string): Promise<boolean> {
-	try {
-		await fs.access(file);
-		return true;
-	} catch (e: any) {
-		return false;
-	}
-}
-
 async function validateTextDocument(textDocument: TextDocument): Promise<Diagnostic[]> {
 	const diagnostics: Diagnostic[] = [];
 
-	const language = new Language(await getSolidityVersion(textDocument));
+	const language = new Language(await inferSolidityVersion(textDocument, workspaceFolders));
 	const parseOutput = language.parse(NonterminalKind.SourceUnit, textDocument.getText());
 
 	await validateNamespaces(parseOutput, language, textDocument, diagnostics);

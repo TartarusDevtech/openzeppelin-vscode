@@ -11,7 +11,8 @@ import { NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
 import { ContractDefinition } from '@nomicfoundation/slang/ast';
 import { cursor, text_index } from '@nomicfoundation/slang';
 import { slangToVSCodeRange } from './helpers/slang';
-import { getSolidityVersion } from './server';
+import { inferSolidityVersion } from './solidityVersion';
+import { workspaceFolders } from './server';
 
 /**
  * Gets a quick fix for moving all variables into a namespace.
@@ -19,7 +20,7 @@ import { getSolidityVersion } from './server';
 export async function getMoveAllVariablesToNamespaceQuickFix(fixesDiagnostics: Diagnostic[], title: string, prefix: string, contractName: string, variables: Variable[], textDocument: TextDocument): Promise<CodeAction | undefined> {
 	let namespaceStructEndRange: text_index.TextRange | undefined = undefined;
 
-	const language = new Language(await getSolidityVersion(textDocument));
+	const language = new Language(await inferSolidityVersion(textDocument, workspaceFolders));
 	const parseOutput = language.parse(NonterminalKind.SourceUnit, textDocument.getText());
 
 	const cursor = parseOutput.createTreeCursor();
