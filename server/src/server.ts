@@ -204,14 +204,14 @@ export async function getSolidityVersion(textDocument: TextDocument) {
 	}
 
 	// 2. infer from foundry config
-	const versionFromFoundry = await inferSolidityVersionFromFoundry();
+	const versionFromFoundry = await inferSolidityVersionFromFoundry(workspaceFolders);
 	if (versionFromFoundry) {
 		console.log("Using Solidity version from Foundry config: " + versionFromFoundry);
 		return versionFromFoundry;
 	}
 
 	// 3. infer from hardhat config
-	const versionFromHardhat = await inferSolidityVersionFromHardhat();
+	const versionFromHardhat = await inferSolidityVersionFromHardhat(workspaceFolders);
 	if (versionFromHardhat) {
 		console.log("Using Solidity version from Hardhat config: " + versionFromHardhat);
 		return versionFromHardhat;
@@ -228,33 +228,34 @@ export async function getSolidityVersion(textDocument: TextDocument) {
 	return Language.supportedVersions()[Language.supportedVersions().length - 1];
 }
 
-async function inferSolidityVersionFromFoundry() {
+async function inferSolidityVersionFromFoundry(workspaceFolders: string[]) {
+	const regex = /solc\s*=\s*["']([^"']+)["']/;
+
 	if (workspaceFolders.length > 0) {
 		for (const workspaceFolder of workspaceFolders) {
 			const foundryConfigPath = path.join(workspaceFolder, 'foundry.toml');
-			if (await exists(foundryConfigPath)) {
-				const foundryConfig = await fs.readFile(foundryConfigPath, 'utf8');
-				const solidityVersion = foundryConfig.match(/solc\s*=\s*["']([^"']+)["']/);
-				if (solidityVersion && solidityVersion[1]) {
-					return solidityVersion[1];
-				}
+			const version = await inferVersionFromConfig(foundryConfigPath, regex);
+			if (version) {
+				return version;
 			}
 		}
 	}
 	return undefined;
 }
 
-async function inferSolidityVersionFromHardhat() {
+async function inferSolidityVersionFromHardhat(workspaceFolders: string[]) {
+	const regex = /solidity:[\s]*{[\s]*version:[\s]*["']([^"']+)["']/;
+
 	if (workspaceFolders.length > 0) {
 		for (const workspaceFolder of workspaceFolders) {
 			const hardhatConfigTsPath = path.join(workspaceFolder, 'hardhat.config.ts');
-			const versionTs = findVersionFromHardhatConfig(hardhatConfigTsPath);
+			const versionTs = await inferVersionFromConfig(hardhatConfigTsPath, regex);
 			if (versionTs) {
 				return versionTs;
 			}
 
 			const hardhatConfigJsPath = path.join(workspaceFolder, 'hardhat.config.js');
-			const versionJs = findVersionFromHardhatConfig(hardhatConfigJsPath);
+			const versionJs = await inferVersionFromConfig(hardhatConfigJsPath, regex);
 			if (versionJs) {
 				return versionJs;
 			}
@@ -263,11 +264,11 @@ async function inferSolidityVersionFromHardhat() {
 	return undefined;
 }
 
-async function findVersionFromHardhatConfig(filePath: string) {
+async function inferVersionFromConfig(filePath: string, regex: RegExp) {
 	if (await exists(filePath)) {
-		const hardhatFile = await fs.readFile(filePath, 'utf8');
+		const configFile = await fs.readFile(filePath, 'utf8');
 
-		const solidityVersion = hardhatFile.match(/solidity:[\s]*{[\s]*version:[\s]*["']([^"']+)["']/);
+		const solidityVersion = configFile.match(regex);
 		if (solidityVersion && solidityVersion[1]) {
 			return solidityVersion[1];
 		} else {
