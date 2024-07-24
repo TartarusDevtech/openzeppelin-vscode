@@ -1,7 +1,7 @@
 # OpenZeppelin Language Server
 
 > [!WARNING]
-> This project is highly experimental and not ready for general use.
+> This project is highly experimental and not ready for general use. Results may not be accurate.
 
 ## Functionality
 
