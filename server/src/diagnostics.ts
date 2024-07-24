@@ -204,7 +204,7 @@ async function validateNamespaceCommentAndHash(expectedNamespaceId: string, curs
 						textDocument,
 						slangToVSCodeRange(textDocument, comment.textRange),
 						`Comment does not match namespace id`,
-						`Expected namespace id ${expectedNamespaceId}`,
+						`Expected namespace id \`${expectedNamespaceId}\``,
 						DiagnosticSeverity.Warning,
 						NAMESPACE_ID_MISMATCH_HASH_COMMENT,
 						{ replacement: `// keccak256(abi.encode(uint256(keccak256("${expectedNamespaceId}")) - 1)) & ~bytes32(uint256(0xff))` } // TODO use comment or multiline commend depending on original kind. keep any other comment text that was there
@@ -246,7 +246,7 @@ async function validateNamespaceCommentAndHash(expectedNamespaceId: string, curs
 						textDocument,
 						slangToVSCodeRange(textDocument, getTrimmedRange(spawnedCursor)),
 						`ERC7201 storage location hash does not match expected namespace id`,
-						`Expected hash to be based on ${expectedNamespaceId}`,
+						`Expected hash to be based on \`${expectedNamespaceId}\``,
 						DiagnosticSeverity.Warning,
 						NAMESPACE_STANDALONE_HASH_MISMATCH,
 						{ replacement: expectedHashFromNamespace }
@@ -305,9 +305,9 @@ async function validateNamespaceStructAnnotation(cursor: cursor.Cursor, textDocu
 						diagnostics,
 						textDocument,
 						slangToVSCodeRange(textDocument, natSpec.textRange),
-						`Unexpected namespace id`,
-						`Namepace id does not match prefix ${namespacePrefix} and contract name ${contractDef.name.text}`,
-						DiagnosticSeverity.Warning,
+						`Namespace id does not match contract name`,
+						`Namepace id does not match prefix \`${namespacePrefix}\` and contract name \`${contractDef.name.text}\``,
+						DiagnosticSeverity.Information,
 						NAMESPACE_ID_MISMATCH,
 						{ replacement: `/// @custom:storage-location erc7201:${expectedNamespaceId}` } // TODO use the same kind of NatSpec (single line or multiline) as the original, and keep any other text that was there
 					);

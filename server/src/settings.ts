@@ -19,8 +19,9 @@ export async function getNamespacePrefix(textDocument: TextDocument) {
 		if (workspaceFolders.length > 0) {
 			// for now we just use the folder name of the first workspace folder
 			// TODO: detect project name from hardhat or foundry project?
-			namespacePrefix = workspaceFolders[0].split('/').pop()!;
-			// TODO convert whitespace to dash
+			const folderName = workspaceFolders[0].split('/').pop()!;
+			// convert whitespace to dash
+			namespacePrefix = folderName.replace(/\s+/g, '-');
 		}
 	} else {
 		console.log("Namespace prefix is: " + namespacePrefix);
