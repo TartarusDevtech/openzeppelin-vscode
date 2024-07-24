@@ -26,6 +26,12 @@
 			"type": "object",
 			"title": "OpenZeppelin Language Server",
 			"properties": {
+				"openzeppelinLS.solidityVersion": {
+					"scope": "resource",
+					"type": "string",
+					"default": "",
+					"description": "The Solidity compiler version to use. Leave blank to auto detect."
+				},
 				"openzeppelinLS.namespacePrefix": {
 					"scope": "resource",
 					"type": "string",

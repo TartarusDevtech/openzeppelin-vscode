@@ -17,7 +17,7 @@ import { promises as fs } from 'fs';
  * 4. From pragma statement
  */
 export async function inferSolidityVersion(textDocument: TextDocument, workspaceFolders: string[]): Promise<string> {
-	const versionFromSetting = (await getDocumentSettings(textDocument.uri)).compilerVersion;
+	const versionFromSetting = (await getDocumentSettings(textDocument.uri)).solidityVersion;
 	if (versionFromSetting && versionFromSetting.trim().length > 0) {
 		console.log("Using Solidity version from settings: " + versionFromSetting);
 		return versionFromSetting;

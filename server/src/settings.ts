@@ -2,7 +2,7 @@ import { TextDocument } from 'vscode-languageserver-textdocument';
 import { getDocumentSettings, workspaceFolders } from './server';
 
 export interface OpenZeppelinLSSettings {
-	compilerVersion?: string;
+	solidityVersion?: string;
 	namespacePrefix?: string;
 }
 
