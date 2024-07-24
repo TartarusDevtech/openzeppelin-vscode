@@ -4,7 +4,7 @@ import {
 	TextEdit
 } from 'vscode-languageserver-textdocument';
 import { NonterminalKind, TerminalKind } from "@nomicfoundation/slang/kinds";
-import { Namespace, Variable, printNamespaceTemplate, getNamespaceId } from './namespace';
+import { Namespace, Variable, printNamespaceTemplate, getNamespaceId, printPublicGetter, toStorageStructName } from './namespace';
 import { Language } from '@nomicfoundation/slang/language';
 import assert = require('node:assert');
 import { NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
@@ -85,7 +85,7 @@ export async function getMoveAllVariablesToNamespaceQuickFix(fixesDiagnostics: D
 			variables,
 		};
 
-		// for a new namespace, replace the first variable with the namespace, then delete the rest of the variables
+		// for a new namespace, replace the first variable with the namespace (including public getter functions), then delete the rest of the variables
 		let insertVariableTextEdit: TextEdit = {
 			range: variables[0].range,
 			newText: printNamespaceTemplate(namespace),
@@ -102,17 +102,27 @@ export async function getMoveAllVariablesToNamespaceQuickFix(fixesDiagnostics: D
 	}
 
 	function editExistingNamespace(edits: TextEdit[], structEndRange: text_index.TextRange, indent = "    ") {
-		// for an existing namespace, delete all variables and insert them into the end of the struct
+		// for an existing namespace, remove all variables and insert them into the end of the struct
 		for (const variable of variables) {
-			let deleteVariableTextEdit: TextEdit = {
-				range: variable.range,
-				newText: ""
-			};
-			edits.push(deleteVariableTextEdit);
+			if (variable.publicGetter) {
+				// if the variable has a public getter, replace the variable with the public getter
+				const publicGetterTextEdit: TextEdit = {
+					range: variable.range,
+					newText: printPublicGetter(variable.name, variable.publicGetter.typeName, toStorageStructName(contractName), indent)
+				};
+				edits.push(publicGetterTextEdit);
+			} else {
+				// otherwise, just delete the variable
+				const deleteVariableTextEdit: TextEdit = {
+					range: variable.range,
+					newText: ""
+				};
+				edits.push(deleteVariableTextEdit);	
+			}
 
 			// TODO infer indents from textDocument using the first indent before the first non-trivia in the contract
 			// TODO instead of adding indents, get the trivia around the original variable and use that
-			let insertVariableTextEdit: TextEdit = {
+			const insertVariableTextEdit: TextEdit = {
 				range: slangToVSCodeRange(textDocument, structEndRange),
 				newText: `\
 ${indent}${variable.content}
@@ -158,7 +168,7 @@ function editNamespaceVariablesInFunctions(contractCursor: cursor.Cursor, contra
 }
 
 function addStorageGetter(contractName: string, blockNode: NonterminalNode, functionBodyCursor: cursor.Cursor, edits: TextEdit[], textDocument: TextDocument, indent = "    ") {
-	const expectedLine = `${contractName}Storage storage $ = _get${contractName}Storage();`;
+	const expectedLine = `${toStorageStructName(contractName)} storage $ = _get${toStorageStructName(contractName)}();`
 	if (!blockNode.unparse().includes(expectedLine)) {
 		const openBraceCursor = functionBodyCursor.spawn();
 		assert(openBraceCursor.goToNextTerminalWithKind(TerminalKind.OpenBrace));

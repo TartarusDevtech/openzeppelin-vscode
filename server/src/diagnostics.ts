@@ -4,7 +4,7 @@ import {
 } from 'vscode-languageserver/node';
 import { TextDocument } from 'vscode-languageserver-textdocument';
 import { NonterminalKind, TerminalKind } from "@nomicfoundation/slang/kinds";
-import { calculateERC7201StorageLocation, getNamespaceId } from './namespace';
+import { calculateERC7201StorageLocation, getNamespaceId, PublicGetter } from './namespace';
 import { Language } from '@nomicfoundation/slang/language';
 import assert = require('node:assert');
 import { NonterminalNode, TerminalNode } from '@nomicfoundation/slang/cst';
@@ -134,6 +134,7 @@ async function validateNamespaceableVariables(cursor: cursor.Cursor, textDocumen
 		const attributes = stateVar.attributes.items;
 
 		let replacement = variableText;
+		let getter: PublicGetter | undefined = undefined;
 
 		for (const attribute of attributes) {
 			if (attribute.variant instanceof TerminalNode && (attribute.variant.kind === TerminalKind.ImmutableKeyword || attribute.variant.kind === TerminalKind.ConstantKeyword)) {
@@ -143,7 +144,12 @@ async function validateNamespaceableVariables(cursor: cursor.Cursor, textDocumen
 				replacement = `${stateVar.typeName.cst.unparse()} ${stateVar.name.text};`;
 				console.log("Replacing variable with: " + replacement);
 
-				// TODO If a variable was originally public, make the quick fix add a public getter with the same signature to allow getting that variable from the namespace
+				// If a variable was originally public, make the quick fix add a public getter with the same signature to allow getting that variable from the namespace
+				if (attribute.variant instanceof TerminalNode && attribute.variant.kind === TerminalKind.PublicKeyword) {
+					getter = {
+						typeName: stateVar.typeName.cst.unparse(),
+					}
+				}
 			}
 		}
 
@@ -176,7 +182,7 @@ async function validateNamespaceableVariables(cursor: cursor.Cursor, textDocumen
 				);	
 			}
 
-			namespaceableContract.variables.push({ content: replacement, name: stateVar.name.text, range: slangToVSCodeRange(textDocument, trimmedRange) });
+			namespaceableContract.variables.push({ content: replacement, name: stateVar.name.text, range: slangToVSCodeRange(textDocument, trimmedRange), publicGetter: getter });
 		}
 	}
 }

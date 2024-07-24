@@ -11,6 +11,11 @@ export type Variable = {
 	content: string;
 	name: string;
 	range: Range;
+	publicGetter?: PublicGetter;
+}
+
+export type PublicGetter = {
+	typeName: string;
 }
 
 export function getNamespaceId(namespacePrefix: string | undefined, contractName: string) {
@@ -22,9 +27,11 @@ export function getNamespaceId(namespacePrefix: string | undefined, contractName
  */
 export function printNamespaceTemplate(namespace: Namespace, indent = "    ") {
 	const namespaceId = getNamespaceId(namespace.prefix, namespace.contractName);
-	const structName = `${namespace.contractName}Storage`;
+	const structName = toStorageStructName(namespace.contractName);
 	const locationName = `${structName}Location`;
 	const rootLocation = calculateERC7201StorageLocation(namespaceId);
+
+	const publicGetters = `${namespace.variables?.map(variable => variable.publicGetter ? printPublicGetter(variable.name, variable.publicGetter.typeName, structName) : undefined).join(`\n${indent}`)}`;
 
 	const namespaceStructContent = `\
 /// @custom:storage-location erc7201:${namespaceId}
@@ -40,10 +47,24 @@ ${indent}${indent}assembly {
 ${indent}${indent}${indent}$.slot := ${locationName}
 ${indent}${indent}}
 ${indent}}
-`
+${publicGetters}
+`;
 
 	return namespaceStructContent;
 }
+
+export function toStorageStructName(contractName: string) {
+	return `${contractName}Storage`;
+}
+
+export function printPublicGetter(name: string, typeName: string, storageStructName: string, indent = "    ") {
+	return `\
+function ${name}() public view returns (${typeName}) {
+${indent}${indent}${storageStructName} storage $ = _get${storageStructName}();
+${indent}${indent}return $.${name};
+${indent}}
+`;
+};
 
 /**
  * Returns the ERC7201 storage location hash for a given namespace id
