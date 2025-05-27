@@ -1,31 +1,37 @@
-# OpenZeppelin Language Server
+# OpenzeppelinVsCode
 
-> [!WARNING]
-> This project is highly experimental and not ready for general use. Results may not be accurate.
+## About
 
-## Functionality
+A Visual Studio Code extension that integrates OpenZeppelin smart contract development tools for enhanced productivity and security in blockchain projects.
 
-- Diagnostics and quick fixes to help convert Solidity smart contracts to use [ERC-7201: Namespaced Storage Layout](https://eips.ethereum.org/EIPS/eip-7201).
+## Features
 
-## Structure
+- Seamless integration with OpenZeppelin contracts and libraries.
+- Code completion and IntelliSense for Solidity using OpenZeppelin standards.
+- Security analysis and smart contract linting.
+- One-click access to OpenZeppelin documentation.
+- Snippets and templates for common smart contract patterns.
+- Automated contract upgrades and deployment workflows.
 
-```
-.
-├── client // Language Client
-│   ├── src
-│   │   └── extension.ts // Language Client entry point
-├── package.json // The extension manifest.
-└── server // Language Server
-    └── src
-        └── server.ts // Language Server entry point
-```
+## Installation
 
-## Running the Extension
+1. Clone this repository:
+   ```bash
+   git clone https://github.com/TartarusDevtech/OpenzeppelinVsCode.git
+   ```
+2. Open the folder in Visual Studio Code.
+3. Run the extension in the VS Code Extension Development Host.
 
-- Run `npm install` in this folder. This installs all necessary npm modules in both the client and server folder
-- Open VS Code on this folder.
-- Press Ctrl+Shift+B (Command+Shift+B on Mac) to start compiling the client and server in [watch mode](https://code.visualstudio.com/docs/editor/tasks#:~:text=The%20first%20entry%20executes,the%20HelloWorld.js%20file.).
-- Switch to the Run and Debug View in the Sidebar (Ctrl+Shift+D, or Command+Shift+B on Mac).
-- Select `Launch Client` from the drop down (if it is not already).
-- Press ▷ to run the launch config (F5).
-- In the [Extension Development Host](https://code.visualstudio.com/api/get-started/your-first-extension#:~:text=Then%2C%20inside%20the%20editor%2C%20press%20F5.%20This%20will%20compile%20and%20run%20the%20extension%20in%20a%20new%20Extension%20Development%20Host%20window.) instance of VSCode, open the window to a Solidity workspace, then open a `.sol` file with Solidity source code.
+## Usage
+
+- Open any Solidity file and start coding with OpenZeppelin contracts.
+- Use the provided snippets to quickly scaffold secure smart contracts.
+- Access documentation and security tools directly from the command palette.
+
+## Contributing
+
+Contributions are welcome! Please open issues or pull requests for enhancements or bug fixes.
+
+## License
+
+This project is licensed under the MIT License.
